@@ -26,7 +26,11 @@ opts_chunk$set(echo = FALSE,
 ## What is quantitative research?
 
 - Empirical research tested by some quantitative comparison
-- For example: "nouns are bigger than verbs."
+- For example: 
+    - "nouns are bigger than verbs"
+    - "length of clauses in academic writing increases with grade level"
+    - "probability of *estar* use (compared to *ser*) in L2 Spanish increases with proficiency"
+    - "measures of accuracy, fluency, and complexity increase with L2 proficiency"
 
 ## How do we do quantitative research?
 
