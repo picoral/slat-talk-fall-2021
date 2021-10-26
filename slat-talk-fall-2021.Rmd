@@ -1,0 +1,368 @@
+---
+title: "Quantitative research"
+author: Mike Hammond and Adriana Picoral
+date: Oct 28, 2021
+output: revealjs::revealjs_presentation
+---
+
+```{r setup, include=FALSE}
+library(janitor)
+library(knitr)
+library(ggthemes)
+library(tidyverse)
+options(scipen = 100)
+opts_chunk$set(echo = FALSE,
+               message = FALSE,
+               warning = FALSE)
+```
+
+## Agenda
+
+- What is quantitative research?
+- An extended example
+
+# Overview
+
+## What is quantitative research?
+
+- Empirical research tested by some quantitative comparison
+- For example: "nouns are bigger than verbs."
+
+## How do we do quantitative research?
+
+- Collect quantitative data.
+- Asses the quantitative comparison statistically.
+- For *some* folks, just looking at the numbers might suffice, but typically not.
+
+## How do we collect quantitative data for language?
+
+- corpus data
+- experimental data
+- assessment data
+- all of these require design and analysis choices.
+
+## How do we assess quantitative comparisons statistically?
+
+- It's not enough to say that $x$ is a bigger number than $y$.
+- Two numbers may differ by chance, not because your hypothesis is correct.
+
+# Example: nouns and verbs
+
+## Nouns are bigger than verbs
+
+- Let's look at the hypothesis that "nouns are bigger than verbs".
+- This is vague in several dimensions.
+- In what sense are they bigger? Letters? Phonemes? Syllables?
+- In what context are they bigger? In dictionaries? The words an individual chooses to say? In some text? If in texts, what kind of text?
+
+## Assumptions
+
+1. Let's assume this means orthographically:
+*on average*, nouns have more letters.
+1. Let's assume this means the words people *use*.
+
+# Behavioral data
+
+## Behavioral data
+
+- Behavioral experiments are one source of quantitative data.
+
+- We asked people to give us 10 random verbs and nouns.
+
+- We now analyze those data and we use `R` for that. (We hide the `R` code here, but it's all available at picoral/slat-talk-fall-2021 on github.)
+
+```{r}
+library(tidyverse)
+# read data in
+noun_verbs_data <- read_tsv(
+  "data/alldata.tsv",
+  col_names = FALSE
+)
+
+# pivot data
+noun_verbs_data_tidy <- noun_verbs_data %>%
+  pivot_longer(cols = X4:X13,
+               names_to = "order",
+               values_to = "word") %>%
+  mutate(order = parse_number(order)-3) %>%
+  rename(participant = X1,
+         native_language = X2,
+         word_type = X3) %>%
+  mutate(participant = as.numeric(factor(participant)),
+         word = tolower(gsub("\\.|to-", "", word))) %>%
+  filter(word != "?") %>%
+  mutate(english_l1 = ifelse(native_language == "english",
+                             "english",
+                             "non-english"))
+```
+
+## Preliminary analysis
+
+Here are the mean lengths in terms of characters. We see that there is an apparent difference.
+
+```{r}
+# add length in characters as variable
+noun_verbs_data_tidy <- noun_verbs_data_tidy %>%
+  mutate(char_count = nchar(word))
+
+# calculate means
+meantab <- noun_verbs_data_tidy %>%
+  group_by(word_type) %>%
+  summarize(mean = mean(char_count))
+
+kable(meantab)
+```
+
+## Native language
+
+There also seems to be a difference as a function of native language. (Here we only include cases where we have more than one speaker of a language.)
+
+```{r}
+# calculate means by native language
+
+#can we put noun/verb in separate columns
+#so there are fewer rows?
+
+lgemeantab <- noun_verbs_data_tidy %>%
+  filter(native_language %in% c("english", "arabic", "korean", "russian", "french", "portuguese")) %>%
+  group_by(native_language, word_type) %>%
+  summarize(mean = mean(char_count)) %>% pivot_wider(
+    names_from = word_type,
+    values_from = mean)
+
+kable(lgemeantab,digits=2)
+```
+
+Are these differences significant or just accidental?
+
+## Significance testing
+
+Linear mixed effects test shows that the noun vs. verb distinction is significant, but native language does not show a significan effect with these data.
+
+```{r}
+#got to shorten the output, just the table with significance
+
+library(lme4)
+library(lmerTest)
+model <- lmer(char_count ~ word_type + english_l1 + word_type:english_l1 + (1|participant),
+            data = noun_verbs_data_tidy)
+model.sum <- summary(model)
+kable(model.sum$coeff)
+```
+
+# Corpus data
+
+## Corpus data
+
+Let's see if a similar pattern holds for corpus data. We use a *teeny* snippet of the tagged Brown corpus: "`ca01`" file with just 2242 words.
+
+```{r}
+#read in file
+b <- readLines('data/ca01')
+#break each line into words
+b <- strsplit(b,'[\n\t ]+')
+#put the words together
+b <- unlist(b)
+#get rid of 'empty' words
+b <- b[nchar(b) > 0]
+nouns <- b[grep('/nn',b)]
+verbs <- b[grep('/vb',b)]
+```
+
+## Do character counts
+
+Here are the mean character counts for our subset:
+
+```{r}
+nounlens <- nchar(gsub('/.*','',nouns))
+nounmean <- mean(nounlens)
+verblens <- nchar(gsub('/.*','',verbs))
+verbmean <- mean(verblens)
+```
+
+Nouns | Verbs
+:----:|:-----:
+`r nounmean` | `r verbmean`
+
+## Significance testing for corpus counts
+
+- Is this difference significant?
+
+```{r}
+library(broom)
+library(purrr)
+ttres <- t.test(nounlens,verblens,paired=F)
+
+pv <- format(ttres$p.value,digits=2)
+```
+
+- *t*-test: *t*(`r ttres$parameter`) = `r ttres$statistic`, *p* = `r pv`
+
+# MICUSP
+
+## Another corpus analysis
+
+We can examine the role of L1 for our question with this corpus.
+
+* Michigan Corpus of Upper-Level Student Papers
+* https://micusp.elicorpora.info/
+
+```{r}
+# read data in
+micusp_metadata <- read_csv("data/micusp_papers.csv") %>%
+  clean_names() %>%
+  mutate(english_l1 = ifelse(nativeness == "NS",
+                             "yes", "no"))
+```
+
+## Basic language data in MICUSP
+
+```{r fig.cap="Distribution of participants according to language background"}
+# table with participant count according to language background
+micusp_metadata %>%
+  count(english_l1, sort = TRUE) %>%
+  kable(col.names = c("L1 English?", "Total Participants"))
+```
+
+## Means by language
+
+With these data there is an interesting interaction between nouns/verbs and L1.
+
+```{r}
+micusp_nouns_verbs <- read_csv("data/micusp_nouns_verbs.csv") %>%
+  mutate(token = tolower(token),
+         char_count = nchar(token),
+         lemma_char_count = nchar(lemma))
+
+mnv <- micusp_nouns_verbs %>%
+  group_by(word_type, group) %>%
+  summarize(mean_word_length = mean(char_count),
+            mean_lemma_length = mean(lemma_char_count))
+
+kable(mnv)
+```
+
+## Let's look at it
+
+```{r}
+#got to format this better
+model_micusp <- lm(char_count ~ word_type + group + word_type:group,
+            data = micusp_nouns_verbs)
+
+# plot effects
+library(effects)
+effect("word_type:group", model_micusp) %>%
+  data.frame() %>%
+  ggplot(aes(y = fit,
+             ymin = lower,
+             ymax = upper,
+             x = word_type,
+             color = group,
+             label = format(fit, digits = 2))) +
+  geom_errorbar(width = .2) +
+  geom_label() +
+  theme_linedraw() +
+  scale_color_colorblind()
+```
+
+## Is this significant?
+
+```{r}
+sum.mod.micusp <- summary(model_micusp)
+kable(sum.mod.micusp$coeff)
+```
+
+# Summary
+
+## Conclusion
+
+- There's lots of interesting stuff to do quantitatively.
+- There's a *bit* of an entry cost in terms of how you process texts and statistics. (We can help you with this!!!)
+- We like numbers.
+- We like `R`.
+
+# Appendix
+
+## Is the lemma length difference significant?
+
+It's *not* because people cite or use inflected forms.
+
+```{r}
+
+#got to make this pretty
+
+model_lemma_micusp <- lm(lemma_char_count ~ word_type + group + word_type:group,
+            data = micusp_nouns_verbs)
+
+sum.lemma <- summary(model_lemma_micusp)
+kable(sum.lemma$coeff)
+```
+
+## Let's look at it again
+
+We plot just the lemmas here.
+
+```{r}
+# plot effects
+effect("word_type:group", model_lemma_micusp) %>%
+  data.frame() %>%
+  ggplot(aes(y = fit,
+             ymin = lower,
+             ymax = upper,
+             x = word_type,
+             color = group,
+             label = format(fit, digits = 2))) +
+  geom_errorbar(width = .2) +
+  geom_label() +
+  theme_linedraw() +
+  scale_color_colorblind()
+```
+
+## Most common verbs by group
+
+There is a known effect whereby non-natives use the verb *can* more frequently (Deshors and Gries, 2014).
+
+```{r}
+library(tidytext)
+micusp_nouns_verbs %>%
+  filter(word_type == "verbs") %>%
+  group_by(group, token) %>%
+  summarize(n = n()) %>%
+  mutate(total = sum(n),
+         percentage = (n/total)*100) %>%
+  slice_max(n = 20, order_by = percentage) %>%
+  select(group, token, percentage) %>%
+  replace(is.na(.), 0) %>%
+  ggplot(aes(x = percentage,
+             y = reorder_within(token, percentage, group))) +
+  geom_col() +
+  geom_label(aes(label = format(percentage, digits = 2))) +
+  facet_wrap(~group, scales = "free_y") +
+  scale_y_reordered() +
+  labs(y = "token") +
+  theme_linedraw()
+```
+
+## Most common verb lemmas by group
+
+Here's the same effect just looking at lemmas.
+
+```{r}
+micusp_nouns_verbs %>%
+  filter(word_type == "verbs") %>%
+  group_by(group, lemma) %>%
+  summarize(n = n()) %>%
+  mutate(total = sum(n),
+         percentage = (n/total)*100) %>%
+  slice_max(n = 20, order_by = percentage) %>%
+  select(group, lemma, percentage) %>%
+  replace(is.na(.), 0) %>%
+  ggplot(aes(x = percentage,
+             y = reorder_within(lemma, percentage, group))) +
+  geom_col() +
+  geom_label(aes(label = format(percentage, digits = 2))) +
+  facet_wrap(~group, scales = "free_y") +
+  scale_y_reordered() +
+  labs(y = "lemma") +
+  theme_linedraw()
+```
